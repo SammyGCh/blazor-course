@@ -42,9 +42,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        //forecasts = await ForecastService.GetForecastAsync(DateTime.Now);
-        HttpResponseMessage respuestaServicio = await Http.GetAsync("https://localhost:44331/api/forecast");
-        string contenido = await respuestaServicio.Content.ReadAsStringAsync();
-        forecasts = JsonSerializer.Deserialize<IEnumerable<WeatherForecast>>(contenido);
+        forecasts = await ForecastService.GetForecastAsync(DateTime.Now);
+        //HttpResponseMessage respuestaServicio = await Http.GetAsync("https://localhost:44331/api/forecast");
+        //string contenido = await respuestaServicio.Content.ReadAsStringAsync();
+        //forecasts = JsonSerializer.Deserialize<IEnumerable<WeatherForecast>>(contenido);
     }
 }
