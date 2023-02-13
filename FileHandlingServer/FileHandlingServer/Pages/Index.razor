@@ -1,0 +1,108 @@
+﻿@page "/"
+@using System.Diagnostics;
+
+<h3>Upload photo</h3>
+@if (!string.IsNullOrEmpty(_imageUrl))
+{
+    <img src="@_imageUrl"/>
+    <br />
+    <br />
+}
+
+<div class="dropArea @_dropClass">
+    Drag and drop photo, or click to select a local file.
+
+    <InputFile disabled="@_uploading"
+        OnChange="OnInputFileChange"
+        @ondragenter="HandleDragEnter"
+        @ondragleave="HandleDragLeave"/>
+</div>
+<br />
+
+<h3>Files</h3>
+<ul>
+    @foreach (var url in _fileUrls)
+    {
+        <li>
+            <a href="@url">
+                @url
+                <br />
+            </a>
+        </li>
+    }
+</ul>
+
+@code
+{
+    private string _imageUrl = string.Empty;
+    private bool _uploading = false;
+    private List<string> _fileUrls = new();
+    private string _dropClass = string.Empty;
+
+    private void HandleDragEnter()
+    {
+        _dropClass = "dropAreaDrug";
+    }
+
+    private void HandleDragLeave()
+    {
+        _dropClass = string.Empty;
+    }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs args)
+    {
+        _dropClass = string.Empty;
+
+        try
+        {
+            _uploading = true;
+            await InvokeAsync(StateHasChanged);
+
+            string format = "image/png";
+            IBrowserFile resizedImageFile = await args.File.RequestImageFileAsync(format, 400, 400);
+
+            byte[] buffer = new byte[resizedImageFile.Size];
+            await resizedImageFile.OpenReadStream().ReadAsync(buffer);
+
+            string justFileName = Path.GetFileNameWithoutExtension(args.File.Name);
+            string newFileNameWithoutPath = $"{justFileName}-{DateTime.Now.Ticks}.png";
+            string fileName = $"{Environment.CurrentDirectory}\\files\\{newFileNameWithoutPath}";
+
+            File.WriteAllBytes(fileName, buffer);
+
+            _imageUrl = $"files/{newFileNameWithoutPath}";
+
+            await ListFiles();
+
+            _uploading = false;
+        }
+        catch (Exception ex)
+        {
+            _uploading = false;
+            await InvokeAsync(StateHasChanged);
+            Debug.WriteLine(ex.Message);
+            throw;
+        }
+    }
+
+    private async Task ListFiles()
+    {
+        _fileUrls.Clear();
+
+        var files = Directory.GetFiles(Environment.CurrentDirectory + "\\Files", "*.*");
+        foreach (var fileName in files)
+        {
+            var file = Path.GetFileName(fileName);
+            string url = $"files/{file}";
+
+            _fileUrls.Add(url);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ListFiles();
+    }
+}

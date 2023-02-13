@@ -1,0 +1,181 @@
+﻿@page "/largefiles"
+@using System.Diagnostics;
+
+<h3>Upload photo</h3>
+@if (!string.IsNullOrEmpty(_imageUrl))
+{
+    <img src="@_imageUrl" />
+    <br />
+    <br />
+}
+
+<div class="dropArea @_dropClass">
+    Drag and drop photo, or click to select a local file.
+
+    <InputFile disabled="@_uploading"
+        OnChange="OnInputFileChange"
+        @ondragenter="HandleDragEnter"
+        @ondragleave="HandleDragLeave"/>
+</div>
+<br />
+
+<h3>Upload large files in chunks</h3>
+<div class="dropArea @_dropClass">
+    Drag and drop photo, or click to select a local file.
+
+    <InputFile disabled="@_uploadingLargeFile"
+               OnChange="OnLargeFileInputFileChange"
+               @ondragenter="HandleDragEnter"
+               @ondragleave="HandleDragLeave" />
+</div>
+<div>@_largeUploadMessage</div>
+@if (_uploadingLargeFile)
+{
+    <progress style="height:50px;width:100%;" value="@_uploadedBytes" max="@_totalBytes"></progress>
+}
+
+<h3>Files</h3>
+<ul>
+    @foreach (var url in _fileUrls)
+    {
+        <li>
+            <a href="@url">
+                @url
+                <br />
+            </a>
+        </li>
+    }
+</ul>
+
+@code {
+    private string _imageUrl = string.Empty;
+    private bool _uploading = false;
+    private bool _uploadingLargeFile = false;
+    private List<string> _fileUrls = new();
+    private string _dropClass = string.Empty;
+    private string _largeUploadMessage = string.Empty;
+    private long _uploadedBytes;
+    private long _totalBytes;
+
+    private void HandleDragEnter()
+    {
+        _dropClass = "dropAreaDrug";
+    }
+
+    private void HandleDragLeave()
+    {
+        _dropClass = string.Empty;
+    }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs args)
+    {
+        _dropClass = string.Empty;
+
+        try
+        {
+            _uploading = true;
+            await InvokeAsync(StateHasChanged);
+
+            //string format = "image/png";
+            //IBrowserFile resizedImageFile = await args.File.RequestImageFileAsync(format, 400, 400);
+
+            //byte[] buffer = new byte[resizedImageFile.Size];
+            //await resizedImageFile.OpenReadStream().ReadAsync(buffer);
+
+            //string justFileName = Path.GetFileNameWithoutExtension(args.File.Name);
+            //string newFileNameWithoutPath = $"{justFileName}-{DateTime.Now.Ticks}.png";
+            //string fileName = $"{Environment.CurrentDirectory}\\files\\{newFileNameWithoutPath}";
+
+            //File.WriteAllBytes(fileName, buffer);
+
+            //_imageUrl = $"files/{newFileNameWithoutPath}";
+            _imageUrl = await FileManager.SaveImageFile(args.File);
+
+            await ListFiles();
+
+            _uploading = false;
+        }
+        catch (Exception ex)
+        {
+            _uploading = false;
+            await InvokeAsync(StateHasChanged);
+            Debug.WriteLine(ex.Message);
+            throw;
+        }
+    }
+
+    private async Task OnLargeFileInputFileChange(InputFileChangeEventArgs args)
+    {
+        _uploadedBytes = 0;
+        _uploadingLargeFile = true;
+        await InvokeAsync(StateHasChanged);
+
+        _totalBytes = args.File.Size;
+        long percent = 0;
+        long chunkSize = 400000;
+        long numChunks = _totalBytes / chunkSize;
+        long remainder = _totalBytes % chunkSize;
+
+        string justFileName = Path.GetFileNameWithoutExtension(args.File.Name);
+        string extension = Path.GetExtension(args.File.Name);
+        string newFileNameWithoutPath = $"{justFileName}-{DateTime.Now.Ticks}{extension}";
+        string fileName = $"{Environment.CurrentDirectory}\\files\\{newFileNameWithoutPath}";
+
+        if (File.Exists(fileName))
+        {
+            File.Delete(fileName);    
+        }
+
+        using(var inStream = args.File.OpenReadStream(long.MaxValue))
+        {
+            using(var outStream = File.OpenWrite(fileName))
+            {
+                while (_uploadedBytes < _totalBytes)
+                {
+                    var whatsLeft = _totalBytes - _uploadedBytes;
+                    if (whatsLeft < chunkSize)
+                        chunkSize = remainder;
+                    // Read the next chunk
+                    var bytes = new byte[chunkSize];
+                    var buffer = new Memory<byte>(bytes);
+                    var read = await inStream.ReadAsync(buffer);
+                    // Write it
+                    await outStream.WriteAsync(bytes, 0, read);
+                    // Update our progress data and UI
+                    _uploadedBytes += read;
+                    percent = _uploadedBytes * 100 / _totalBytes;
+                    // Report progress with a string
+                    _largeUploadMessage = $"Uploading {args.File.Name} {percent}%";
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+
+        _largeUploadMessage = "Uploaded complete.";
+
+        await ListFiles();
+
+        _uploadingLargeFile = false;
+    }
+
+    private async Task ListFiles()
+    {
+        _fileUrls.Clear();
+
+        var files = Directory.GetFiles(Environment.CurrentDirectory + "\\Files", "*.*");
+        foreach (var fileName in files)
+        {
+            var file = Path.GetFileName(fileName);
+            string url = $"files/{file}";
+
+            _fileUrls.Add(url);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ListFiles();
+    }
+}
